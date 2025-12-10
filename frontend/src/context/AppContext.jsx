@@ -66,7 +66,7 @@ const AppContextProvider = ({ children }) => {
       if (data.success) {
         setCategories(data.categories);
       } else {
-        logconsole.log("Failed to fetch categories");
+        console.log("Failed to fetch categories");
       }
     } catch (error) {
       console.log("Error fetching categories:", error);

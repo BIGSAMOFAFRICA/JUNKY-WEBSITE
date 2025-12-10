@@ -10,8 +10,8 @@ const generateToken = (res, payload) => {
 
   res.cookie("token", token, {
     httpOnly: true,
-    secure: false, // must be false on localhost
-    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production", // must be true on prod
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     maxAge: 24 * 60 * 60 * 1000, // 1 day
   });
 
@@ -23,7 +23,7 @@ export const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
     if (!name || !email || !password) {
-      return res.json({
+      return res.status(400).json({
         message: "Please fill all the fields",
         success: false,
       });
@@ -31,16 +31,16 @@ export const registerUser = async (req, res) => {
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.json({ message: "User already exists", success: false });
+      return res.status(400).json({ message: "User already exists", success: false });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({ name, email, password: hashedPassword });
 
-    return res.json({ message: "User registered successfully", success: true });
+    return res.status(201).json({ message: "User registered successfully", success: true });
   } catch (error) {
     console.log(error.message);
-    return res.json({ message: "Internal server error", success: false });
+    return res.status(500).json({ message: "Internal server error", success: false });
   }
 };
 
@@ -49,20 +49,17 @@ export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
-      return res.json({
-        message: "Please fill all the fields",
-        success: false,
-      });
+      return res.status(400).json({ message: "Please fill all the fields", success: false });
     }
 
     const user = await User.findOne({ email });
     if (!user) {
-      return res.json({ message: "User does not exist", success: false });
+      return res.status(404).json({ message: "User does not exist", success: false });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.json({ message: "Invalid credentials", success: false });
+      return res.status(401).json({ message: "Invalid credentials", success: false });
     }
 
     // ✅ Generate token and set cookie
@@ -78,7 +75,7 @@ export const loginUser = async (req, res) => {
     });
   } catch (error) {
     console.log(error.message);
-    return res.json({ message: "Internal server error", success: false });
+    return res.status(500).json({ message: "Internal server error", success: false });
   }
 };
 
@@ -87,17 +84,14 @@ export const adminLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
-      return res.json({
-        message: "Please fill all the fields",
-        success: false,
-      });
+      return res.status(400).json({ message: "Please fill all the fields", success: false });
     }
 
     const adminEmail = process.env.ADMIN_EMAIL;
     const adminPassword = process.env.ADMIN_PASSWORD;
 
     if (email !== adminEmail || password !== adminPassword) {
-      return res.json({ message: "Invalid credentials", success: false });
+      return res.status(401).json({ message: "Invalid credentials", success: false });
     }
 
     // ✅ Generate token and set cookie
@@ -110,18 +104,22 @@ export const adminLogin = async (req, res) => {
     });
   } catch (error) {
     console.log(error.message);
-    return res.json({ message: "Internal server error", success: false });
+    return res.status(500).json({ message: "Internal server error", success: false });
   }
 };
 
 // 🔹 Logout
 export const logoutUser = async (req, res) => {
   try {
-    res.clearCookie("token");
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    });
     return res.json({ message: "User logged out successfully", success: true });
   } catch (error) {
     console.log(error.message);
-    return res.json({ message: "Internal server error", success: false });
+    return res.status(500).json({ message: "Internal server error", success: false });
   }
 };
 
@@ -134,17 +132,19 @@ export const getProfile = async (req, res) => {
     }
     res.json({ success: true, user });
   } catch (error) {
-    return res.json({ message: "Internal server error", success: false });
+    return res.status(500).json({ message: "Internal server error", success: false });
   }
 };
 
 // 🔹 Check if user is authenticated
 export const isAuth = async (req, res) => {
   try {
-    const { id } = req.user;
-    const user = await User.findById(id).select("-password");
+    const user = await User.findById(req.user.id).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found", success: false });
+    }
     res.json({ success: true, user });
   } catch (error) {
-    return res.json({ message: "Internal server error", success: false });
+    return res.status(500).json({ message: "Internal server error", success: false });
   }
 };
